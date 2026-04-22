@@ -29,12 +29,33 @@ int si::app::run() {
         for (const auto& batt: batteries) {
             auto batteryData = batt->fetchData();
 
+            std::string batteryStatus;
+
+            switch (batteryData.status) {
+                case si::InfoTypes::BatteryStatus::Unknown:
+                    batteryStatus = "Unknown";
+                    break;
+                case si::InfoTypes::BatteryStatus::Full:
+                    batteryStatus = "Full";
+                    break;
+                case si::InfoTypes::BatteryStatus::Discharging:
+                    batteryStatus = "Discharging";
+                    break;
+                case si::InfoTypes::BatteryStatus::Charging:
+                    batteryStatus = "Charging";
+                    break;
+                case si::InfoTypes::BatteryStatus::NotCharging:
+                    batteryStatus = "Not charging";
+                    break;
+            }
+
             std::cout << std::format(
-                "Name: {}\nCapacity: {}\nEnergy: {}\nVoltage (microVolts): {}",
+                "Name: {}\nCapacity: {}\nEnergy: {}\nVoltage (microVolts): {}\nStatus: {}",
                 batteryData.modelName,
                 batteryData.capacity,
                 batteryData.energy_now,
-                batteryData.voltage_now) << "\n---------" << std::endl;
+                batteryData.voltage_now,
+                batteryStatus) << "\n---------" << std::endl;
         }
 
 

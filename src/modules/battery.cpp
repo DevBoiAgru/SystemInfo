@@ -3,11 +3,12 @@
 //
 
 #include "sysinfo/modules/battery.h"
+#include "sysinfo/utils/stringFuncs.h"
 
-#include <format>
 #include <utility>
 #include <charconv>
 #include <filesystem>
+#include <iostream>
 
 si::BatteryModule::BatteryModule(std::string sysfsFolder)
     :m_sysfsFolder(std::move(sysfsFolder)),
@@ -31,15 +32,7 @@ si::BatteryModule::BatteryModule(std::string sysfsFolder)
     }
 
     // Remove whitespace from the front and end
-    auto const first = std::ranges::find_if(modelName, [](const unsigned char ch) {
-        return !std::isspace(ch);
-    });
-
-    const auto last = std::ranges::find_if(modelName.rbegin(), modelName.rend(), [](const unsigned char ch) {
-        return !std::isspace(ch);
-    }).base();
-
-    m_modelName = std::string(first, last);
+    m_modelName = si::utils::trim(modelName);
 }
 
 si::InfoTypes::BatteryInfo si::BatteryModule::BatteryModule::fetchData() {
@@ -59,6 +52,23 @@ si::InfoTypes::BatteryInfo si::BatteryModule::BatteryModule::fetchData() {
         std::from_chars(energyNow_sv.data(), energyNow_sv.data() + energyNow_sv.size(), data.capacity);
     }
 
+    // Update status
+    si::SysFsReader statusReader(m_sysfsFolder + "/status");
+    auto battStatus_sv = statusReader.read();
+    auto batteryStatus = si::utils::trim(battStatus_sv);
+
+    if (batteryStatus == "Not charging") {
+        data.status = InfoTypes::BatteryStatus::NotCharging;
+    } else if (batteryStatus == "Discharging") {
+        data.status = InfoTypes::BatteryStatus::Discharging;
+    } else if (batteryStatus == "Charging") {
+        data.status = InfoTypes::BatteryStatus::Charging;
+    } else if (batteryStatus == "Full") {
+        data.status = InfoTypes::BatteryStatus::Full;
+    } else {
+        data.status = InfoTypes::BatteryStatus::Unknown;
+    }
+    
     data.modelName = m_modelName;
 
     return data;

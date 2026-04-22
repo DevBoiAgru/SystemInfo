@@ -14,11 +14,20 @@
 namespace si {
 
     namespace InfoTypes {
+        enum class BatteryStatus {
+            Unknown = 0,
+            Charging,
+            Discharging,
+            NotCharging,
+            Full,
+        };
+
         struct BatteryInfo {
             uint8_t capacity{0};
             uint32_t voltage_now{0};
             uint32_t energy_now{0};
             std::string_view modelName;
+            BatteryStatus status{BatteryStatus::Unknown};
             // TODO: Add max versions for value_now fields
         };
     }
