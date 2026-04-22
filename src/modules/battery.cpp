@@ -27,7 +27,7 @@ si::BatteryModule::BatteryModule(std::string sysfsFolder)
 
         // If still empty, fallback to "Battery"
         if (modelName.empty()) {
-            modelName = "Battery";
+            modelName = "Unknown battery";
         }
     }
 
