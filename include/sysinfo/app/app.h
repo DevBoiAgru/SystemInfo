@@ -8,6 +8,10 @@
 #include <atomic>
 #include <string>
 #include <utility>
+#include <vector>
+#include <memory>
+
+#include "sysinfo/modules/battery.h"
 
 namespace si {
     class app {
@@ -27,6 +31,10 @@ namespace si {
         int m_webPort{6002};                    // Port on which the web server will be hosted on
         std::string m_webHost;                     // Host for the web server
         std::atomic<bool> m_running{true};
+
+        // Different run entry points for different modes
+        int runConsoleMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries);
+        int runWebMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries);
     };
 
 

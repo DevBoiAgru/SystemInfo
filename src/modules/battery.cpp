@@ -8,7 +8,9 @@
 #include <utility>
 #include <charconv>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <algorithm>
 
 si::BatteryModule::BatteryModule(std::string sysfsFolder)
     :m_sysfsFolder(std::move(sysfsFolder)),
@@ -17,81 +19,39 @@ si::BatteryModule::BatteryModule(std::string sysfsFolder)
     m_currentNowReader(m_sysfsFolder + "/current_now"),
     m_energyNowReader(m_sysfsFolder + "/energy_now") {
 
-    // We already get a battery number, always assume it exists (BAT0, BAT1 etc)
-    isAvailable = true;
+    // Validate that the sysfs path exists before marking as available
+    namespace fs = std::filesystem;
+    isAvailable = fs::exists(m_sysfsFolder) && fs::is_directory(m_sysfsFolder);
 
-    // Try to find the model name for this battery
-    std::string modelName(si::SysFsReader(m_sysfsFolder + "/model_name").read());
-    if (modelName.empty()) {
-        modelName = std::string(si::SysFsReader(m_sysfsFolder + "/serial_number").read());
-        modelName = "Battery " + modelName;     // Prepend "Battery" to get "Battery <Serial Number>"
-
-        // If still empty, fallback to "Battery"
-        if (modelName.empty()) {
-            modelName = "Unknown battery";
-        }
+    if (!isAvailable) {
+        return;
     }
+
+    // Determine model name
+    m_modelName = determineModelName(m_sysfsFolder);
 
     // Initialise the max values, these shouldn't change so safe to set them once on init
-    si::SysFsReader energyFullReader(m_sysfsFolder + "/energy_full");
-    si::SysFsReader energyFullDesignReader(m_sysfsFolder + "/energy_full");
-    const std::string_view energyMax_sv = energyFullReader.read();
-    const std::string_view energyMaxDesign_sv = energyFullDesignReader.read();
-
-    if (!energyMax_sv.empty()) {
-        std::from_chars(energyMax_sv.data(), energyMax_sv.data() + energyMax_sv.size(), m_energy_max);
-    }
-
-    if (!energyMaxDesign_sv.empty()) {
-        std::from_chars(energyMaxDesign_sv.data(), energyMaxDesign_sv.data() + energyMaxDesign_sv.size(), m_energy_max_design);
-    }
-
-
-    // Remove whitespace from the front and end
-    m_modelName = si::utils::trim(modelName);
+    readAndParseUint32(m_sysfsFolder + "/energy_full", m_energy_max);
+    readAndParseUint32(m_sysfsFolder + "/energy_full_design", m_energy_max_design);
 }
 
-si::InfoTypes::BatteryInfo si::BatteryModule::BatteryModule::fetchData() {
+si::InfoTypes::BatteryInfo si::BatteryModule::fetchData() {
     auto data = si::InfoTypes::BatteryInfo{};
 
-    const std::string_view capacityNow_sv = m_capacityReader.read();
-    const std::string_view voltageNow_sv = m_voltageNowReader.read();
-    const std::string_view energyNow_sv = m_energyNowReader.read();
-    const std::string_view currentNow_sv = m_currentNowReader.read();
+    parseUint32(m_capacityReader.read(), data.capacity);
+    parseUint32(m_voltageNowReader.read(), data.voltage_now);
+    parseUint32(m_energyNowReader.read(), data.energy_now);
+    parseUint32(m_currentNowReader.read(), data.current_now);
 
-    if (!capacityNow_sv.empty()) {
-        std::from_chars(capacityNow_sv.data(), capacityNow_sv.data() + capacityNow_sv.size(), data.capacity);
-    }
-    if (!voltageNow_sv.empty()) {
-        std::from_chars(voltageNow_sv.data(), voltageNow_sv.data() + voltageNow_sv.size(), data.voltage_now);
-    }
-    if (!energyNow_sv.empty()) {
-        std::from_chars(energyNow_sv.data(), energyNow_sv.data() + energyNow_sv.size(), data.energy_now);
-    }
-
-    if (!currentNow_sv.empty()) {
-        std::from_chars(currentNow_sv.data(), currentNow_sv.data() + currentNow_sv.size(), data.current_now);
-    }
+    // Calculate power: P = V × I (in µW)
+    data.power_now = static_cast<uint32_t>(
+        static_cast<uint64_t>(data.voltage_now) * data.current_now / 1000000
+    );
 
     // Update status
-    si::SysFsReader statusReader(m_sysfsFolder + "/status");
-    auto battStatus_sv = statusReader.read();
-    auto batteryStatus = si::utils::trim(battStatus_sv);
+    data.status = parseStatus(si::utils::trim(SysFsReader(m_sysfsFolder + "/status").read()));
 
-    if (batteryStatus == "Not charging") {
-        data.status = InfoTypes::BatteryStatus::NotCharging;
-    } else if (batteryStatus == "Discharging") {
-        data.status = InfoTypes::BatteryStatus::Discharging;
-    } else if (batteryStatus == "Charging") {
-        data.status = InfoTypes::BatteryStatus::Charging;
-    } else if (batteryStatus == "Full") {
-        data.status = InfoTypes::BatteryStatus::Full;
-    } else {
-        data.status = InfoTypes::BatteryStatus::Unknown;
-    }
-    
     data.modelName = m_modelName;
-
     data.energy_max = m_energy_max;
     data.energy_max_design = m_energy_max_design;
 
@@ -113,9 +73,95 @@ std::vector<std::string> si::BatteryModule::findBatteries() {
         // Check if the 'type' file contains "Battery"
         std::ifstream typeFile(entry.path() / "type");
         std::string type;
-        if (std::getline(typeFile, type) && type == "Battery") {
+        if (std::getline(typeFile, type) && si::utils::trim(type) == "Battery") {
             batteryPaths.push_back(entry.path().string());
         }
     }
     return batteryPaths;
+}
+
+si::InfoTypes::BatteryStatus si::BatteryModule::parseStatus(std::string_view statusStr) {
+    // Convert to lowercase for case-insensitive comparison
+    std::string lowerStatus;
+    lowerStatus.reserve(statusStr.size());
+    std::transform(statusStr.begin(), statusStr.end(), std::back_inserter(lowerStatus),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    if (lowerStatus == "not charging") {
+        return InfoTypes::BatteryStatus::NotCharging;
+    } else if (lowerStatus == "discharging") {
+        return InfoTypes::BatteryStatus::Discharging;
+    } else if (lowerStatus == "charging") {
+        return InfoTypes::BatteryStatus::Charging;
+    } else if (lowerStatus == "full") {
+        return InfoTypes::BatteryStatus::Full;
+    } else {
+        return InfoTypes::BatteryStatus::Unknown;
+    }
+}
+
+bool si::BatteryModule::parseUint32(std::string_view str, uint32_t& value) {
+    if (str.empty()) {
+        return false;
+    }
+    uint32_t result = 0;
+    auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), result);
+    if (ec == std::errc()) {
+        value = result;
+        return true;
+    }
+    return false;
+}
+
+bool si::BatteryModule::readAndParseUint32(const std::string& path, uint32_t& value) {
+    return parseUint32(SysFsReader(path).read(), value);
+}
+
+std::string si::BatteryModule::determineModelName(const std::string& sysfsFolder) {
+    std::string modelName(si::SysFsReader(sysfsFolder + "/model_name").read());
+
+    if (modelName.empty()) {
+        // Fallback to Battery + model name, for example: Battery LIPC101
+        modelName = std::string(si::SysFsReader(sysfsFolder + "/serial_number").read());
+        if (!modelName.empty()) {
+            modelName = "Battery " + modelName;
+        }
+    }
+
+    if (modelName.empty()) {
+        modelName = "Unknown battery";
+    }
+
+    return si::utils::trim(modelName);
+}
+
+std::string si::BatteryModule::statusToString(InfoTypes::BatteryStatus status) {
+    switch (status) {
+        case InfoTypes::BatteryStatus::Unknown: return "Unknown";
+        case InfoTypes::BatteryStatus::Full: return "Full";
+        case InfoTypes::BatteryStatus::Discharging: return "Discharging";
+        case InfoTypes::BatteryStatus::Charging: return "Charging";
+        case InfoTypes::BatteryStatus::NotCharging: return "Not charging";
+        default: return "Unknown";
+    }
+}
+
+nlohmann::json si::InfoTypes::BatteryInfo::toJson(int index) const {
+    nlohmann::json j{
+        {"name", modelName},
+        {"status", BatteryModule::statusToString(status)},
+        {"capacity", capacity},
+        {"voltage", voltage_now},
+        {"current", current_now},
+        {"energy", energy_now},
+        {"power", power_now},
+        {"energy_max", energy_max},
+        {"energy_max_design", energy_max_design}
+    };
+
+    if (index >= 0) {
+        j["index"] = index;
+    }
+
+    return j;
 }
