@@ -28,7 +28,46 @@ int si::app::run() {
 
 
     if (!m_startWeb) {
+        while (m_running.load(std::memory_order::relaxed)) {
 
+            std::printf("\033[2J\033[H");
+
+            for (const auto& batt: batteries) {
+                auto batteryData = batt->fetchData();
+
+                std::string batteryStatus;
+
+                switch (batteryData.status) {
+                    case si::InfoTypes::BatteryStatus::Unknown:
+                        batteryStatus = "Unknown";
+                        break;
+                    case si::InfoTypes::BatteryStatus::Full:
+                        batteryStatus = "Full";
+                        break;
+                    case si::InfoTypes::BatteryStatus::Discharging:
+                        batteryStatus = "Discharging";
+                        break;
+                    case si::InfoTypes::BatteryStatus::Charging:
+                        batteryStatus = "Charging";
+                        break;
+                    case si::InfoTypes::BatteryStatus::NotCharging:
+                        batteryStatus = "Not charging";
+                        break;
+                }
+
+                std::cout << std::format(
+                    "BATTERY:\nName: {}\nCapacity: {}\nEnergy: {}\nVoltage: {}\nCurrent: {}\nStatus: {}\n",
+                    batteryData.modelName,
+                    batteryData.capacity,
+                    batteryData.energy_now,
+                    batteryData.voltage_now,
+                    batteryData.current_now,
+                    batteryStatus) << std::endl;
+
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(m_updateRate));
+            }
+        }
         return 0;
     }
 
@@ -37,7 +76,6 @@ int si::app::run() {
     httplib::Server svr;
 
     svr.Get("/battery", [&batteries](const httplib::Request &req, httplib::Response &res) {
-        nlohmann::json j;
         for (const auto& batt: batteries) {
                 const auto batteryData = batt->fetchData();
 
@@ -61,7 +99,7 @@ int si::app::run() {
                         break;
                 }
 
-                j= {
+                nlohmann::json j= {
                     {"status", batteryStatus},
                     {"capacity", batteryData.capacity},
                     {"voltage", batteryData.voltage_now},

@@ -13,12 +13,6 @@ namespace si {
     class app {
 
     public:
-        explicit app(const int updateRate = 1000) :
-        m_updateRate(updateRate),
-        m_startWeb(false) {
-
-        }
-
         explicit app(const int updateRate, const bool startWeb, const int port, std::string host) :
         m_updateRate(updateRate),
         m_startWeb(startWeb), m_webPort(port), m_webHost(std::move(host)) {

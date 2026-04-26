@@ -13,9 +13,9 @@
 si::BatteryModule::BatteryModule(std::string sysfsFolder)
     :m_sysfsFolder(std::move(sysfsFolder)),
     m_capacityReader(m_sysfsFolder + "/capacity"),
-    m_voltageNowReader(m_sysfsFolder + "/power_now"),
+    m_voltageNowReader(m_sysfsFolder + "/voltage_now"),
     m_currentNowReader(m_sysfsFolder + "/current_now"),
-    m_energyNowReader(m_sysfsFolder + "/voltage_now") {
+    m_energyNowReader(m_sysfsFolder + "/energy_now") {
 
     // We already get a battery number, always assume it exists (BAT0, BAT1 etc)
     isAvailable = true;
