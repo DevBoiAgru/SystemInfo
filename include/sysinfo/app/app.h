@@ -6,12 +6,22 @@
 #define SYSTEMINFO_APP_H
 
 #include <atomic>
+#include <string>
+#include <utility>
 
 namespace si {
     class app {
 
     public:
-        explicit app(const int updateRate = 1000) : m_updateRate(updateRate) {
+        explicit app(const int updateRate = 1000) :
+        m_updateRate(updateRate),
+        m_startWeb(false) {
+
+        }
+
+        explicit app(const int updateRate, const bool startWeb, const int port, std::string host) :
+        m_updateRate(updateRate),
+        m_startWeb(startWeb), m_webPort(port), m_webHost(std::move(host)) {
 
         }
 
@@ -19,6 +29,9 @@ namespace si {
 
     private:
         int m_updateRate{1000};                 // Milliseconds to wait between updates
+        bool m_startWeb{true};                  // Start webserver to serve information or no
+        int m_webPort{6002};                    // Port on which the web server will be hosted on
+        std::string m_webHost;                     // Host for the web server
         std::atomic<bool> m_running{true};
     };
 

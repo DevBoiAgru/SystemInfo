@@ -26,9 +26,13 @@ namespace si {
             uint8_t capacity{0};
             uint32_t voltage_now{0};
             uint32_t energy_now{0};
+            uint32_t current_now{0};
+
+            uint32_t energy_max{0};
+            uint32_t energy_max_design{0};
+
             std::string_view modelName;
             BatteryStatus status{BatteryStatus::Unknown};
-            // TODO: Add max versions for value_now fields
         };
     }
 
@@ -46,7 +50,11 @@ namespace si {
 
         SysFsReader m_capacityReader;       // Reader to read the capacity file
         SysFsReader m_voltageNowReader;     // Reader to read the current voltage
+        SysFsReader m_currentNowReader;     // Reader to read the current
         SysFsReader m_energyNowReader;      // Reader to read the current energy
+
+        uint32_t m_energy_max{0};
+        uint32_t m_energy_max_design{0};
     };
 }
 
