@@ -109,9 +109,17 @@ int si::app::run() {
 
                 // NOTE!: This disables CORS! Remove this if you need CORS
                 res.set_header("Access-Control-Allow-Origin", "*");
-            
+
                 res.set_content(j.dump(), "application/json");
             }
+    });
+
+    svr.Options(R"(/.*)", [](const httplib::Request &, httplib::Response &res) {
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        res.set_header("Access-Control-Allow-Credentials", "true");
+        res.status = 204;
     });
 
 
