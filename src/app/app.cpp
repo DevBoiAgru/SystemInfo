@@ -13,6 +13,7 @@
 #include "sysinfo/modules/battery.h"
 #include "sysinfo/modules/cpu.h"
 #include "sysinfo/modules/memory.h"
+#include "sysinfo/utils/ansi.h"
 
 int si::app::run() {
     const auto batteriesPath = si::BatteryModule::findBatteries();
@@ -73,57 +74,62 @@ void si::app::handleModuleRequest(const std::string& moduleName, const httplib::
 }
 
 int si::app::runConsoleMode() {
+    using namespace si::utils;
+
     while (m_running.load(std::memory_order::relaxed)) {
-        // Clear the console
-        std::printf("\033[2J\033[H");
+        // Clear the console only in pretty mode
+        if (m_prettyPrint) {
+            std::printf(ANSI_CLEAR_SCREEN);
+        }
 
         // Display CPU info
         if (m_cpu && m_cpu->isAvailable) {
             auto cpuData = m_cpu->fetchData();
 
-            std::cout << std::format(
-                "CPU:\nModel: {}\nCores: {}\nThreads: {}\nFrequency: {} MHz\nUsage: {:.1f}%\nLoad: {:.2f} {:.2f} {:.2f}\nTemperature: {:.1f}°C\n\n",
-                cpuData.model,
-                cpuData.cores,
-                cpuData.threads,
-                cpuData.frequency,
-                cpuData.usage_percent,
-                cpuData.load_1min,
-                cpuData.load_5min,
-                cpuData.load_15min,
-                cpuData.temperature / 1000.0) << std::endl;
+            const std::string indent = m_prettyPrint ? "  " : "";
+            std::cout << header("CPU:", m_prettyPrint) << "\n";
+            std::cout << label(indent + "Model:", m_prettyPrint) << " " << cpuData.model << "\n";
+            std::cout << label(indent + "Cores:", m_prettyPrint) << " " << cpuData.cores << "\n";
+            std::cout << label(indent + "Threads:", m_prettyPrint) << " " << cpuData.threads << "\n";
+            std::cout << label(indent + "Frequency:", m_prettyPrint) << " " << cpuData.frequency << " MHz\n";
+            std::cout << label(indent + "Usage:", m_prettyPrint) << " " << value(std::format("{:.1f}", cpuData.usage_percent), m_prettyPrint) << "%\n";
+            std::cout << label(indent + "Load:", m_prettyPrint) << " " << cpuData.load_1min << " " << cpuData.load_5min << " " << cpuData.load_15min << "\n";
+            std::cout << label(indent + "Temperature:", m_prettyPrint) << " " << value_magenta(std::format("{:.1f}", cpuData.temperature / 1000.0), m_prettyPrint) << "°C\n\n";
         }
 
         // Display Memory info
         if (m_memory) {
             auto memoryData = m_memory->fetchData();
 
-            std::cout << std::format(
-                "MEMORY:\nTotal: {} GB\nUsed: {} GB\nAvailable: {} GB\nUsage: {:.1f}%\nCached: {} MB\nBuffers: {} MB\nSwap: {} GB / {} GB\n\n",
-                static_cast<float>(memoryData.total) / 1024 / 1024,
-                static_cast<float>(memoryData.used) / 1024 / 1024,
-                static_cast<float>(memoryData.available) / 1024 / 1024,
-                static_cast<float>(memoryData.usage_percent),
-                static_cast<float>(memoryData.cached) / 1024,
-                static_cast<float>(memoryData.buffers) / 1024,
-                static_cast<float>(memoryData.swap_used) / 1024 / 1024,
-                static_cast<float>(memoryData.swap_total) / 1024 / 1024) << std::endl;
+            const std::string indent = m_prettyPrint ? "  " : "";
+            std::cout << header("MEMORY:", m_prettyPrint) << "\n";
+            std::cout << label(indent + "Total:", m_prettyPrint) << " " << static_cast<float>(memoryData.total) / 1024 / 1024 << " GB\n";
+            std::cout << label(indent + "Used:", m_prettyPrint) << " " << value_red(std::format("{:.1f}", static_cast<float>(memoryData.used) / 1024 / 1024), m_prettyPrint) << " GB\n";
+            std::cout << label(indent + "Available:", m_prettyPrint) << " " << static_cast<float>(memoryData.available) / 1024 / 1024 << " GB\n";
+            std::cout << label(indent + "Usage:", m_prettyPrint) << " " << value(std::format("{:.1f}", static_cast<float>(memoryData.usage_percent)), m_prettyPrint) << "%\n";
+            std::cout << label(indent + "Cached:", m_prettyPrint) << " " << static_cast<float>(memoryData.cached) / 1024 << " MB\n";
+            std::cout << label(indent + "Buffers:", m_prettyPrint) << " " << static_cast<float>(memoryData.buffers) / 1024 << " MB\n";
+            std::cout << label(indent + "Swap:", m_prettyPrint) << " " << static_cast<float>(memoryData.swap_used) / 1024 / 1024 << " GB / " << static_cast<float>(memoryData.swap_total) / 1024 / 1024 << " GB\n\n";
         }
 
         // Display Battery info
         for (size_t i = 0; i < m_batteries.size(); ++i) {
             auto batteryData = m_batteries[i]->fetchData();
 
-            std::cout << std::format(
-                "BATTERY {}:\nName: {}\nCapacity: {}%\nEnergy: {} µWh\nVoltage: {} mV\nCurrent: {} mA\nPower: {} mW\nStatus: {}\n",
-                i,
-                batteryData.modelName,
-                batteryData.capacity,
-                batteryData.energy_now,
-                batteryData.voltage_now / 1000,
-                batteryData.current_now / 1000,
-                batteryData.power_now,
-                si::BatteryModule::statusToString(batteryData.status)) << std::endl;
+            const std::string indent = m_prettyPrint ? "  " : "";
+            std::cout << header(std::format("BATTERY {}:", i), m_prettyPrint) << "\n";
+            std::cout << label(indent + "Name:", m_prettyPrint) << " " << batteryData.modelName << "\n";
+            std::cout << label(indent + "Capacity:", m_prettyPrint) << " " << value(std::format("{}", batteryData.capacity), m_prettyPrint) << "%\n";
+            std::cout << label(indent + "Energy:", m_prettyPrint) << " " << batteryData.energy_now << " µWh\n";
+            std::cout << label(indent + "Voltage:", m_prettyPrint) << " " << batteryData.voltage_now / 1000 << " mV\n";
+            std::cout << label(indent + "Current:", m_prettyPrint) << " " << batteryData.current_now / 1000 << " mA\n";
+            std::cout << label(indent + "Power:", m_prettyPrint) << " " << batteryData.power_now << " mW\n";
+            std::cout << label(indent + "Status:", m_prettyPrint) << " " << si::BatteryModule::statusToString(batteryData.status) << "\n";
+        }
+
+        // Add separator in plain mode
+        if (!m_prettyPrint) {
+            std::cout << "----------------------------------------\n";
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(m_updateRate));

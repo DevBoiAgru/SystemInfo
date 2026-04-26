@@ -23,9 +23,9 @@ namespace si {
     class app {
 
     public:
-        explicit app(const int updateRate, const bool startWeb, const int port, std::string host) :
+        explicit app(const int updateRate, const bool startWeb, const int port, std::string host, bool prettyPrint) :
         m_updateRate(updateRate),
-        m_startWeb(startWeb), m_webPort(port), m_webHost(std::move(host)) {
+        m_startWeb(startWeb), m_webPort(port), m_webHost(std::move(host)), m_prettyPrint(prettyPrint) {
 
         }
 
@@ -35,7 +35,8 @@ namespace si {
         int m_updateRate{1000};                 // Milliseconds to wait between updates
         bool m_startWeb{true};                  // Start webserver to serve information or no
         int m_webPort{6002};                    // Port on which the web server will be hosted on
-        std::string m_webHost;                     // Host for the web server
+        std::string m_webHost;                  // Host for the web server
+        bool m_prettyPrint{false};              // Pretty print the output in console using ANSI codes
         std::atomic<bool> m_running{true};
 
         // Module storage
