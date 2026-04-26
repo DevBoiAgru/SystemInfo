@@ -12,6 +12,7 @@
 
 #include "sysinfo/modules/battery.h"
 #include "sysinfo/modules/cpu.h"
+#include "sysinfo/modules/memory.h"
 
 int si::app::run() {
     const auto batteriesPath = si::BatteryModule::findBatteries();
@@ -22,6 +23,9 @@ int si::app::run() {
 
     // Initialize CPU module
     m_cpu = std::make_unique<si::CPUModule>();
+
+    // Initialize Memory module
+    m_memory = std::make_unique<si::MemoryModule>();
 
     // Register modules with their fetch functions
     registerModules();
@@ -48,6 +52,12 @@ void si::app::registerModules() {
     m_moduleFetchers["cpu"] = [this]() -> nlohmann::json {
         const auto cpuData = m_cpu->fetchData();
         return cpuData.toJson();
+    };
+
+    // Register Memory module fetcher
+    m_moduleFetchers["memory"] = [this]() -> nlohmann::json {
+        const auto memoryData = m_memory->fetchData();
+        return memoryData.toJson();
     };
 }
 
@@ -82,6 +92,22 @@ int si::app::runConsoleMode() {
                 cpuData.load_5min,
                 cpuData.load_15min,
                 cpuData.temperature / 1000.0) << std::endl;
+        }
+
+        // Display Memory info
+        if (m_memory) {
+            auto memoryData = m_memory->fetchData();
+
+            std::cout << std::format(
+                "MEMORY:\nTotal: {} GB\nUsed: {} GB\nAvailable: {} GB\nUsage: {:.1f}%\nCached: {} MB\nBuffers: {} MB\nSwap: {} GB / {} GB\n\n",
+                static_cast<float>(memoryData.total) / 1024 / 1024,
+                static_cast<float>(memoryData.used) / 1024 / 1024,
+                static_cast<float>(memoryData.available) / 1024 / 1024,
+                static_cast<float>(memoryData.usage_percent),
+                static_cast<float>(memoryData.cached) / 1024,
+                static_cast<float>(memoryData.buffers) / 1024,
+                static_cast<float>(memoryData.swap_used) / 1024 / 1024,
+                static_cast<float>(memoryData.swap_total) / 1024 / 1024) << std::endl;
         }
 
         // Display Battery info

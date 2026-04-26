@@ -62,6 +62,23 @@ std::string si::CPUModule::readCPUModel() {
             }
         }
     }
+
+    // Falback to Hardware: <model>
+    while (std::getline(file, line)) {
+        if (line.find("Hardware") != std::string::npos) {
+            size_t pos = line.find(':');
+            if (pos != std::string::npos) {
+                std::string model = line.substr(pos + 1);
+                // Trim leading whitespace
+                size_t start = model.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    return model.substr(start);
+                }
+                return model;
+            }
+        }
+    }
+
     return "Unknown CPU";
 }
 
