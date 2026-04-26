@@ -11,30 +11,53 @@
 #include <cassert>
 
 #include "sysinfo/modules/battery.h"
-#include "json/nlohmann.h"
-#include "http/httplib.h"
 
 int si::app::run() {
     const auto batteriesPath = si::BatteryModule::findBatteries();
-    std::vector<std::unique_ptr<si::BatteryModule>> batteries;
 
     for (const auto& path: batteriesPath) {
-        batteries.push_back(std::make_unique<si::BatteryModule>(path));
+        m_batteries.push_back(std::make_unique<si::BatteryModule>(path));
     }
+
+    // Register modules with their fetch functions
+    registerModules();
 
     if (!m_startWeb) {
-        return runConsoleMode(batteries);
+        return runConsoleMode();
     }
 
-    return runWebMode(batteries);
+    return runWebMode();
 }
 
-int si::app::runConsoleMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries) {
+void si::app::registerModules() {
+    // Register battery module fetcher
+    m_moduleFetchers["battery"] = [this]() -> nlohmann::json {
+        nlohmann::json batteries_j = nlohmann::json::array();
+        for (size_t i = 0; i < m_batteries.size(); ++i) {
+            const auto batteryData = m_batteries[i]->fetchData();
+            batteries_j.push_back(batteryData.toJson(i));
+        }
+        return nlohmann::json{{"batteries", batteries_j}};
+    };
+}
+
+void si::app::handleModuleRequest(const std::string& moduleName, const httplib::Request &req, httplib::Response &res) {
+    auto it = m_moduleFetchers.find(moduleName);
+    if (it != m_moduleFetchers.end()) {
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_content(it->second().dump(), "application/json");
+    } else {
+        res.status = 404;
+        res.set_content(R"({"error": "Module not found"})", "application/json");
+    }
+}
+
+int si::app::runConsoleMode() {
     while (m_running.load(std::memory_order::relaxed)) {
         std::printf("\033[2J\033[H");
 
-        for (size_t i = 0; i < batteries.size(); ++i) {
-            auto batteryData = batteries[i]->fetchData();
+        for (size_t i = 0; i < m_batteries.size(); ++i) {
+            auto batteryData = m_batteries[i]->fetchData();
 
             std::cout << std::format(
                 "BATTERY {}:\nName: {}\nCapacity: {}%\nEnergy: {} µWh\nVoltage: {} mV\nCurrent: {} mA\nPower: {} mW\nStatus: {}\n",
@@ -53,22 +76,28 @@ int si::app::runConsoleMode(const std::vector<std::unique_ptr<si::BatteryModule>
     return 0;
 }
 
-int si::app::runWebMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries) {
+int si::app::runWebMode() {
     httplib::Server svr;
 
-    svr.Get("/battery", [&batteries](const httplib::Request &req, httplib::Response &res) {
+    // Handler for all modules (must be registered before generic handler)
+    svr.Get("/all", [this](const httplib::Request &req, httplib::Response &res) {
         nlohmann::json j;
-        nlohmann::json batteries_j = nlohmann::json::array();
-
-        for (size_t i = 0; i < batteries.size(); ++i) {
-            const auto batteryData = batteries[i]->fetchData();
-            batteries_j.push_back(batteryData.toJson(i));
+        for (const auto& [name, fetcher] : m_moduleFetchers) {
+            j[name] = fetcher();
         }
-
-        j["batteries"] = batteries_j;
-
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_content(j.dump(), "application/json");
+    });
+
+    // Generic handler for any registered module (excludes /all)
+    svr.Get(R"(/(\w+))", [this](const httplib::Request &req, httplib::Response &res) {
+        std::string moduleName = req.matches[1];
+        if (moduleName == "all") {
+            res.status = 404;
+            res.set_content(R"({"error": "Use /all endpoint"})", "application/json");
+            return;
+        }
+        handleModuleRequest(moduleName, req, res);
     });
 
     svr.Options(R"(/.*)", [](const httplib::Request &, httplib::Response &res) {

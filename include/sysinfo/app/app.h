@@ -10,7 +10,11 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <functional>
+#include <unordered_map>
 
+#include "json/nlohmann.h"
+#include "http/httplib.h"
 #include "sysinfo/modules/battery.h"
 
 namespace si {
@@ -32,9 +36,22 @@ namespace si {
         std::string m_webHost;                     // Host for the web server
         std::atomic<bool> m_running{true};
 
+        // Module storage
+        std::vector<std::unique_ptr<si::BatteryModule>> m_batteries;
+
+        // Module registry - stores fetch functions for different modules
+        using ModuleFetcher = std::function<nlohmann::json()>;
+        std::unordered_map<std::string, ModuleFetcher> m_moduleFetchers;
+
+        // Register modules
+        void registerModules();
+
+        // Generic handler for any module
+        void handleModuleRequest(const std::string& moduleName, const httplib::Request &req, httplib::Response &res);
+
         // Different run entry points for different modes
-        int runConsoleMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries);
-        int runWebMode(const std::vector<std::unique_ptr<si::BatteryModule>>& batteries);
+        int runConsoleMode();
+        int runWebMode();
     };
 
 
