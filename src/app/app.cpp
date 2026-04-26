@@ -107,6 +107,9 @@ int si::app::run() {
                     {"energy", batteryData.energy_now},
                 };
 
+                // NOTE!: This disables CORS! Remove this if you need CORS
+                res.set_header("Access-Control-Allow-Origin", "*");
+            
                 res.set_content(j.dump(), "application/json");
             }
     });
