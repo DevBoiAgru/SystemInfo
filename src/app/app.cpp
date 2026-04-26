@@ -117,8 +117,8 @@ int si::app::run() {
     svr.Options(R"(/.*)", [](const httplib::Request &, httplib::Response &res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         res.set_header("Access-Control-Allow-Credentials", "true");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control");
         res.status = 204;
     });
 
