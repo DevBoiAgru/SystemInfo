@@ -11,6 +11,7 @@
 #include <cassert>
 
 #include "sysinfo/modules/battery.h"
+#include "sysinfo/modules/cpu.h"
 
 int si::app::run() {
     const auto batteriesPath = si::BatteryModule::findBatteries();
@@ -18,6 +19,9 @@ int si::app::run() {
     for (const auto& path: batteriesPath) {
         m_batteries.push_back(std::make_unique<si::BatteryModule>(path));
     }
+
+    // Initialize CPU module
+    m_cpu = std::make_unique<si::CPUModule>();
 
     // Register modules with their fetch functions
     registerModules();
@@ -39,6 +43,12 @@ void si::app::registerModules() {
         }
         return nlohmann::json{{"batteries", batteries_j}};
     };
+
+    // Register CPU module fetcher
+    m_moduleFetchers["cpu"] = [this]() -> nlohmann::json {
+        const auto cpuData = m_cpu->fetchData();
+        return cpuData.toJson();
+    };
 }
 
 void si::app::handleModuleRequest(const std::string& moduleName, const httplib::Request &req, httplib::Response &res) {
@@ -54,8 +64,27 @@ void si::app::handleModuleRequest(const std::string& moduleName, const httplib::
 
 int si::app::runConsoleMode() {
     while (m_running.load(std::memory_order::relaxed)) {
+        // Clear the console
         std::printf("\033[2J\033[H");
 
+        // Display CPU info
+        if (m_cpu && m_cpu->isAvailable) {
+            auto cpuData = m_cpu->fetchData();
+
+            std::cout << std::format(
+                "CPU:\nModel: {}\nCores: {}\nThreads: {}\nFrequency: {} MHz\nUsage: {:.1f}%\nLoad: {:.2f} {:.2f} {:.2f}\nTemperature: {:.1f}°C\n\n",
+                cpuData.model,
+                cpuData.cores,
+                cpuData.threads,
+                cpuData.frequency,
+                cpuData.usage_percent,
+                cpuData.load_1min,
+                cpuData.load_5min,
+                cpuData.load_15min,
+                cpuData.temperature / 1000.0) << std::endl;
+        }
+
+        // Display Battery info
         for (size_t i = 0; i < m_batteries.size(); ++i) {
             auto batteryData = m_batteries[i]->fetchData();
 

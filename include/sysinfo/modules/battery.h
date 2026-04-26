@@ -41,7 +41,7 @@ namespace si {
         };
     }
 
-    class BatteryModule : InfoModule<InfoTypes::BatteryInfo> {
+    class BatteryModule : public InfoModule<InfoTypes::BatteryInfo> {
     public:
         explicit BatteryModule(std::string sysfsFolder);
         InfoTypes::BatteryInfo fetchData() override;

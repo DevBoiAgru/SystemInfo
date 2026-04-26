@@ -16,6 +16,7 @@
 #include "json/nlohmann.h"
 #include "http/httplib.h"
 #include "sysinfo/modules/battery.h"
+#include "sysinfo/modules/cpu.h"
 
 namespace si {
     class app {
@@ -38,6 +39,7 @@ namespace si {
 
         // Module storage
         std::vector<std::unique_ptr<si::BatteryModule>> m_batteries;
+        std::unique_ptr<si::CPUModule> m_cpu;
 
         // Module registry - stores fetch functions for different modules
         using ModuleFetcher = std::function<nlohmann::json()>;
